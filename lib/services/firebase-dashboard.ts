@@ -151,6 +151,12 @@ function formatByGranularity(d: Date, granularity: Granularity): string {
 
 async function getDocsWithOptionalDateRange(collName: string, dateField: string, range?: DateRange) {
   const db = getDb()
+  const startTime = Date.now()
+  console.log(`[Firebase] 📊 Consultando colección: ${collName}`, {
+    dateField,
+    range: range ? { start: range.start, end: range.end } : "sin filtro de fecha",
+  })
+  
   try {
     if (range?.start || range?.end) {
       const constraints: QueryConstraint[] = []
@@ -158,12 +164,30 @@ async function getDocsWithOptionalDateRange(collName: string, dateField: string,
       if (range.end) constraints.push(where(dateField, "<=", new Date(range.end)))
       const q1 = query(collection(db, collName), ...constraints)
       const snap1 = await getDocs(q1)
+      const elapsed = Date.now() - startTime
+      console.log(`[Firebase] ✅ Consulta con filtro de fecha completada: ${collName}`, {
+        documentos: snap1.size,
+        tiempo: `${elapsed}ms`,
+        filtros: constraints.length,
+      })
       if (!snap1.empty) return snap1
     }
-  } catch {
+  } catch (error: any) {
+    const elapsed = Date.now() - startTime
+    console.warn(`[Firebase] ⚠️ Error en consulta con filtro de fecha: ${collName}`, {
+      error: error?.message || String(error),
+      tiempo: `${elapsed}ms`,
+    })
     // ignore and fallback to full collection
   }
-  return await getDocs(collection(db, collName))
+  
+  const snap = await getDocs(collection(db, collName))
+  const elapsed = Date.now() - startTime
+  console.log(`[Firebase] ✅ Consulta completa: ${collName}`, {
+    documentos: snap.size,
+    tiempo: `${elapsed}ms`,
+  })
+  return snap
 }
 
 function filterByClientsParts<T extends Record<string, any>>(
@@ -191,11 +215,17 @@ function filterByClientsParts<T extends Record<string, any>>(
 
 // KPIs
 export async function fetchOrdenesKPIs(rangeOrFilter?: DateRange | DashboardFilter): Promise<KPIOrdenes> {
+  const startTime = Date.now()
+  console.log(`[Dashboard] 🔍 fetchOrdenesKPIs iniciado`, { filter: rangeOrFilter })
+  
   const filter: DashboardFilter = isDashboardFilter(rangeOrFilter) ? rangeOrFilter : { range: rangeOrFilter }
   const snap = await getDocsWithOptionalDateRange("ordenes_compra", "fecha_orden", filter.range)
   let rows: any[] = []
   snap.forEach((d) => rows.push(d.data()))
+  console.log(`[Dashboard] 📦 fetchOrdenesKPIs: ${rows.length} documentos obtenidos`)
+  
   rows = filterByClientsParts(rows, filter.clientIds, undefined)
+  console.log(`[Dashboard] 🔽 fetchOrdenesKPIs: ${rows.length} documentos después de filtros de clientes`)
 
   let total = 0
   let valor = 0
@@ -205,11 +235,22 @@ export async function fetchOrdenesKPIs(rangeOrFilter?: DateRange | DashboardFilt
     valor += Number(r.valor_total ?? 0)
   })
 
-  return { totalOrdenes: total, valorTotal: valor }
+  const elapsed = Date.now() - startTime
+  const result = { totalOrdenes: total, valorTotal: valor }
+  console.log(`[Dashboard] ✅ fetchOrdenesKPIs completado`, {
+    ...result,
+    tiempo: `${elapsed}ms`,
+    documentosProcesados: rows.length,
+  })
+  
+  return result
 }
 
 // Órdenes por cliente
 export async function fetchOrdenesPorCliente(rangeOrFilter?: DateRange | DashboardFilter): Promise<SerieItem[]> {
+  const startTime = Date.now()
+  console.log(`[Dashboard] 🔍 fetchOrdenesPorCliente iniciado`, { filter: rangeOrFilter })
+  
   const filter: DashboardFilter = isDashboardFilter(rangeOrFilter) ? rangeOrFilter : { range: rangeOrFilter }
   const snap = await getDocsWithOptionalDateRange("ordenes_compra", "fecha_orden", filter.range)
   const map = new Map<string, { name: string; count: number; id: string }>()
@@ -224,14 +265,27 @@ export async function fetchOrdenesPorCliente(rangeOrFilter?: DateRange | Dashboa
     map.get(key)!.count += 1
   })
 
-  return Array.from(map.values()).map((v) => ({ name: v.name, value: v.count }))
+  const result = Array.from(map.values()).map((v) => ({ name: v.name, value: v.count }))
+  const elapsed = Date.now() - startTime
+  console.log(`[Dashboard] ✅ fetchOrdenesPorCliente completado`, {
+    clientes: result.length,
+    tiempo: `${elapsed}ms`,
+    documentos: snap.size,
+  })
+  
+  return result
 }
 
 // Órdenes por producto
 export async function fetchOrdenesPorProducto(rangeOrFilter?: DateRange | DashboardFilter): Promise<SerieItem[]> {
+  const startTime = Date.now()
+  console.log(`[Dashboard] 🔍 fetchOrdenesPorProducto iniciado`, { filter: rangeOrFilter })
+  
   const filter: DashboardFilter = isDashboardFilter(rangeOrFilter) ? rangeOrFilter : { range: rangeOrFilter }
   const db = getDb()
   const linesSnap = await getDocs(collection(db, "lineas_orden"))
+  console.log(`[Dashboard] 📦 fetchOrdenesPorProducto: ${linesSnap.size} líneas de orden obtenidas`)
+  
   const map = new Map<string, { name: string; count: number }>()
 
   linesSnap.forEach((d) => {
@@ -245,9 +299,18 @@ export async function fetchOrdenesPorProducto(rangeOrFilter?: DateRange | Dashbo
     map.get(key)!.count += 1
   })
 
-  return Array.from(map.values())
+  const result = Array.from(map.values())
     .map((v) => ({ name: v.name, value: v.count }))
     .slice(0, 12)
+    
+  const elapsed = Date.now() - startTime
+  console.log(`[Dashboard] ✅ fetchOrdenesPorProducto completado`, {
+    productos: result.length,
+    tiempo: `${elapsed}ms`,
+    documentos: linesSnap.size,
+  })
+  
+  return result
 }
 
 // Variación de forecast
@@ -256,10 +319,18 @@ export async function fetchForecastVariation(
   points = 12,
   rangeOrFilter?: DateRange | DashboardFilter,
 ): Promise<LinePoint[]> {
+  const startTime = Date.now()
+  console.log(`[Dashboard] 🔍 fetchForecastVariation iniciado`, { source, points, filter: rangeOrFilter })
+  
   const filter: DashboardFilter = isDashboardFilter(rangeOrFilter) ? rangeOrFilter : { range: rangeOrFilter }
   const db = getDb()
   let snap = await getDocs(query(collection(db, "forecasts"), where("source", "==", source)))
-  if (snap.empty) snap = await getDocs(collection(db, "forecasts"))
+  console.log(`[Dashboard] 📦 fetchForecastVariation: ${snap.size} forecasts con source="${source}"`)
+  if (snap.empty) {
+    console.log(`[Dashboard] ⚠️  No se encontraron forecasts con source="${source}", obteniendo todos...`)
+    snap = await getDocs(collection(db, "forecasts"))
+    console.log(`[Dashboard] 📦 fetchForecastVariation: ${snap.size} forecasts totales`)
+  }
   const gran = filter.granularity ?? "week"
 
   const byKey = new Map<string, number>()
@@ -292,6 +363,14 @@ export async function fetchForecastVariation(
     const deltaPct = prev === 0 ? 0 : Math.abs((p.value - prev) / prev)
     return { ...p, isPeak: deltaPct >= 0.3 }
   })
+  
+  const elapsed = Date.now() - startTime
+  console.log(`[Dashboard] ✅ fetchForecastVariation completado`, {
+    puntos: result.length,
+    tiempo: `${elapsed}ms`,
+    documentos: snap.size,
+  })
+  
   return result
 }
 
@@ -488,11 +567,16 @@ export async function fetchVolumenProjVsDemand(
 
 // MOQ
 export async function fetchMOQCompliance(): Promise<MOQCompliance[]> {
+  const startTime = Date.now()
+  console.log(`[Dashboard] 🔍 fetchMOQCompliance iniciado`)
+  
   const db = getDb()
   const [moqsSnap, linesSnap] = await Promise.all([
     getDocs(collection(db, "moqs")),
     getDocs(collection(db, "lineas_orden")),
   ])
+  
+  console.log(`[Dashboard] 📦 fetchMOQCompliance: ${moqsSnap.size} MOQs, ${linesSnap.size} líneas de orden`)
 
   const moqMap = new Map<string, { clientId: string; partId: string; moq: number }>()
   moqsSnap.forEach((d) => {
@@ -541,7 +625,7 @@ export async function fetchMOQCompliance(): Promise<MOQCompliance[]> {
     }
   })
 
-  return Array.from(compliance.values())
+  const result = Array.from(compliance.values())
     .map((record) => ({
       clientId: record.clientId,
       clientName: record.clientName,
@@ -552,6 +636,14 @@ export async function fetchMOQCompliance(): Promise<MOQCompliance[]> {
       compliantOrders: record.compliant,
     }))
     .slice(0, 10)
+    
+  const elapsed = Date.now() - startTime
+  console.log(`[Dashboard] ✅ fetchMOQCompliance completado`, {
+    items: result.length,
+    tiempo: `${elapsed}ms`,
+  })
+  
+  return result
 }
 
 // Lead time

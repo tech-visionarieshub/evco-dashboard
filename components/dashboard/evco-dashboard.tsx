@@ -100,17 +100,21 @@ export default function EVCODashboard() {
   // Auth like seed
   useEffect(() => {
     async function initAuth() {
+      console.log("[Dashboard] 🔐 Iniciando autenticación...")
       try {
         if (auth.currentUser) {
+          console.log("[Dashboard] ✅ Usuario ya autenticado:", auth.currentUser.uid)
           setIsSignedIn(true)
           setAuthError(null)
           return
         }
-        await signInAnonymously(auth)
+        console.log("[Dashboard] 🔑 Iniciando sesión anónima...")
+        const userCredential = await signInAnonymously(auth)
+        console.log("[Dashboard] ✅ Autenticación anónima exitosa:", userCredential.user.uid)
         setIsSignedIn(true)
         setAuthError(null)
       } catch (err: any) {
-        console.error("Auth error:", err)
+        console.error("[Dashboard] ❌ Error de autenticación:", err)
         if (err.code === "auth/operation-not-allowed") {
           setAuthError("Autenticación anónima no permitida. Habilítala en Firebase Console.")
         } else {
@@ -123,23 +127,85 @@ export default function EVCODashboard() {
   }, [])
 
   async function load() {
-    if (!isSignedIn) return
+    if (!isSignedIn) {
+      console.log("[Dashboard] ⏸️  No autenticado, cancelando carga de datos")
+      return
+    }
+    
+    const loadStartTime = Date.now()
+    console.log("[Dashboard] 🚀 Iniciando carga de datos del dashboard...", {
+      filtros: filters,
+      usuario: auth.currentUser?.uid,
+    })
+    
     try {
       setLoading(true)
       setError(null)
+      
       const [kpi, pc, pp, varc, tchg, aser, pvd, moq, lt, dev, inv] = await Promise.all([
-        fetchOrdenesKPIs(filters),
-        fetchOrdenesPorCliente(filters),
-        fetchOrdenesPorProducto(filters),
-        fetchForecastVariation("client", 12, filters),
-        fetchTopForecastChanges("client", 5, filters),
-        fetchAsertividad("client", 12, filters),
-        fetchVolumenProjVsDemand(filters),
-        fetchMOQCompliance(),
-        fetchLeadTimePerformance(),
-        fetchDeviationHeatmap(),
-        fetchInventoryExcess(),
+        fetchOrdenesKPIs(filters).catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchOrdenesKPIs:", e)
+          return { totalOrdenes: 0, valorTotal: 0 }
+        }),
+        fetchOrdenesPorCliente(filters).catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchOrdenesPorCliente:", e)
+          return []
+        }),
+        fetchOrdenesPorProducto(filters).catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchOrdenesPorProducto:", e)
+          return []
+        }),
+        fetchForecastVariation("client", 12, filters).catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchForecastVariation:", e)
+          return []
+        }),
+        fetchTopForecastChanges("client", 5, filters).catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchTopForecastChanges:", e)
+          return []
+        }),
+        fetchAsertividad("client", 12, filters).catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchAsertividad:", e)
+          return { percent: 0 }
+        }),
+        fetchVolumenProjVsDemand(filters).catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchVolumenProjVsDemand:", e)
+          return []
+        }),
+        fetchMOQCompliance().catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchMOQCompliance:", e)
+          return []
+        }),
+        fetchLeadTimePerformance().catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchLeadTimePerformance:", e)
+          return []
+        }),
+        fetchDeviationHeatmap().catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchDeviationHeatmap:", e)
+          return []
+        }),
+        fetchInventoryExcess().catch((e) => {
+          console.error("[Dashboard] ❌ Error en fetchInventoryExcess:", e)
+          return []
+        }),
       ])
+
+      const loadElapsed = Date.now() - loadStartTime
+      console.log("[Dashboard] ✅ Carga de datos completada", {
+        tiempo: `${loadElapsed}ms`,
+        resultados: {
+          kpis: kpi,
+          porCliente: `${pc.length} clientes`,
+          porProducto: `${pp.length} productos`,
+          variacion: `${varc.length} puntos`,
+          topChanges: `${tchg.length} cambios`,
+          asertividad: `${aser.percent}%`,
+          projVsDemand: `${pvd.length} items`,
+          moqCompliance: `${moq.length} items`,
+          leadTimePerf: `${lt.length} items`,
+          deviationHeatmap: `${dev.length} items`,
+          inventoryExcess: `${inv.length} items`,
+        },
+      })
 
       setKpis(kpi)
       setPorCliente(pc)
@@ -153,10 +219,17 @@ export default function EVCODashboard() {
       setDeviationHeatmap(dev)
       setInventoryExcess(inv)
     } catch (e: any) {
-      console.error("Error cargando dashboard:", e)
+      const loadElapsed = Date.now() - loadStartTime
+      console.error("[Dashboard] ❌ Error crítico cargando dashboard:", {
+        error: e,
+        mensaje: e?.message || "Error desconocido",
+        tiempo: `${loadElapsed}ms`,
+        stack: e?.stack,
+      })
       setError(e?.message || "No se pudieron cargar los datos.")
     } finally {
       setLoading(false)
+      console.log("[Dashboard] 🏁 Carga de datos finalizada")
     }
   }
 
