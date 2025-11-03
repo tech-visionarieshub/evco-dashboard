@@ -1,0 +1,8 @@
+// No existing code to merge, so we start with the updates directly.
+
+import { Cliente, OrdenCompra, LineaOrden, HistorialProcesamiento } from "@/lib/firebase/types";
+import type { OrdenCompraInsert, OrdenCompraUpdate } from "../lib/firebase/types";
+import type { ClienteUpdate } from "../../lib/firebase/types";
+import { type EstadoOrden } from "lib/firebase/types";
+
+// /** rest of code here **/

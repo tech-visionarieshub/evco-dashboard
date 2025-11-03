@@ -1,0 +1,13 @@
+// app/page.tsx
+import EvcODashboard from "@/components/dashboard/evco-dashboard"
+
+export default function HomePage() {
+  return <EvcODashboard />
+}
+
+// app/dashboard/evco/page.tsx
+import EvcODashboard from "@/components/dashboard/evco-dashboard"
+
+export default function EvcODashboardPage() {
+  return <EvcODashboard />
+}
