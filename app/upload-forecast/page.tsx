@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   description: "Carga y analiza archivos de forecast de clientes",
 }
 
+// Forzar renderizado dinámico para evitar errores de Firebase durante SSR
+export const dynamic = 'force-dynamic'
+
 export default function UploadForecastPage() {
   return <ClientForecastFlow />
 }
